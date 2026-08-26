@@ -4,6 +4,7 @@
 
 #include <optional>
 #include <span>
+#include <utility>
 #include <vector>
 
 class LiftedKnapsackSepa : public scip::ObjSepa {
@@ -19,4 +20,14 @@ class LiftedKnapsackSepa : public scip::ObjSepa {
                bool forcecut, SCIP_Result* result);
   int cut_count = 0;
   std::optional<std::vector<SCIP_Row*>> knapsack_constraints = std::nullopt;
+
+  /* Scratch buffers reused across rows and across calls; they only ever grow,
+   * so the per-row work stays allocation-free after the first few rows. */
+  std::vector<SCIP_Real> incumbent_solution;
+  std::vector<int> indices;
+  std::vector<int> items_taken;
+  std::vector<int> items_not_taken;
+  std::vector<std::pair<SCIP_Real, int>> cpuw_list;
+  std::vector<SCIP_Real> coeffs;
+  std::vector<int> original_indices;
 };
