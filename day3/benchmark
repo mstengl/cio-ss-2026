@@ -54,12 +54,6 @@ for sel in "$@"; do
     nodes="$(sed -n 's/^Nodes: *//p' "$statfile" | tail -1)"
     pdi="$(sed -n 's/^PrimalDualIntegral: *//p' "$statfile" | tail -1)"
 
-    # Unsolved instances are charged the full limits.
-    [[ "$status" = solved ]] || {
-      time=60
-      nodes=100000
-    }
-
     row "$name" "$status" "$(printf '%.3f' "$time")" "$nodes" "$(printf '%.3f' "$pdi")"
     times+=("$time")
     nodelist+=("$nodes")
@@ -68,3 +62,4 @@ for sel in "$@"; do
 
   row -- geomean "$(geomean "$SHIFT" "${times[@]}")" "$(geomean 0 "${nodelist[@]}")" "$(geomean "$SHIFT" "${pdilist[@]}")"
 done
+

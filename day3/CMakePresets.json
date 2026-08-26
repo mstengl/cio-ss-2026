@@ -13,8 +13,8 @@
       "binaryDir": "${sourceDir}/build",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
-        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON", 
-        "SCIP_DIR": "/Users/gtjusila/Developer/personal/cio-ss-2026/scip/build"
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "SCIP_DIR": "/opt/scip/debug/lib/cmake/scip"
       }
     },
     {
@@ -24,7 +24,7 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON", 
-        "SCIP_DIR": "/Users/gtjusila/Developer/personal/cio-ss-2026/scip/build"
+        "SCIP_DIR": "/opt/scip/release/lib/cmake/scip"
       }
     }
     

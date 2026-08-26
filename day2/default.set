@@ -1,6 +1,8 @@
 limits/time=60
-limits/nodes=1000000
+display/verblevel=2
+limits/nodes=100000000
+heuristics/ziround/freq=-1
 branching/random/priority=9999
-# Do not change the above 
-
-heuristics/ziround/freq=1
+constraints/linear/sepafreq=-1
+constraints/linear/propfreq=-1
+constraints/linear/maxprerounds=0

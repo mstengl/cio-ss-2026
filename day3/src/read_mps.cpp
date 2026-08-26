@@ -1,5 +1,6 @@
 #include <objscip/objscip.h>
 #include <objscip/objscipdefplugins.h>
+#include <objscip/objsepa.h>
 #include <scip/dialog_default.h>
 #include <scip/scip_solvingstats.h>
 
@@ -11,6 +12,7 @@
 #include <string>
 
 #include "heur_zirounding.hpp"
+#include "sepa_liftedknapsack.hpp"
 #include "utils.hpp"
 
 void scip_include_minimal_set(SCIP* scip) {
@@ -62,6 +64,8 @@ int main(int argc, char* argv[]) {
   scip_include_minimal_set(scip.get());
 
   CALL_CHECK(SCIPincludeObjHeur(scip.get(), new ZIRoundHeur(scip.get()), TRUE))
+  CALL_CHECK(
+      SCIPincludeObjSepa(scip.get(), new LiftedKnapsackSepa(scip.get()), TRUE))
   CALL_CHECK(SCIPreadProb(scip.get(),
                           vm["input_path"].as<std::string>().c_str(), nullptr));
 
