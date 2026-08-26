@@ -103,6 +103,9 @@ SCIP_Real compute_incumbent_activity(SCIP_Row* row,
   return activity;
 }
 
+std::vector<SCIP_Real> _incumbent;
+std::vector<SCIP_Real> _activities;
+
 SCIP_DECL_HEUREXEC(ZIRoundHeur::scip_exec) {
   /* Dont touch start from here */
   *result = SCIP_DIDNOTRUN;
@@ -137,7 +140,8 @@ SCIP_DECL_HEUREXEC(ZIRoundHeur::scip_exec) {
                                static_cast<size_t>(SCIPgetNLPRows(scip))};
 
   // Read the incumbent LP solution from SCIP see SCIPcolGetPrimsol
-  std::vector<SCIP_Real> incumbent(lp_cols.size());
+  _incumbent.resize(lp_cols.size());
+  std::vector<SCIP_Real>& incumbent = _incumbent;
   std::ranges::transform(lp_cols, incumbent.begin(),
                          [](SCIP_COL* c) { return SCIPcolGetPrimsol(c); });
   // Loop while there is any fractional variable remaining in the incumbent
@@ -148,7 +152,8 @@ SCIP_DECL_HEUREXEC(ZIRoundHeur::scip_exec) {
   // Cache of the row activities under the current incumbent, indexed by LP row
   // position. Computed once here and kept in sync incrementally whenever a
   // shift is committed to the incumbent.
-  std::vector<SCIP_Real> activities(lp_rows.size());
+  _activities.resize(lp_rows.size());
+  std::vector<SCIP_Real>& activities = _activities;
   std::ranges::transform(lp_rows, activities.begin(), [&](SCIP_ROW* r) {
     return compute_incumbent_activity(r, incumbent);
   });
@@ -258,9 +263,13 @@ SCIP_DECL_HEUREXEC(ZIRoundHeur::scip_exec) {
         consider(var_lb);
       }
 
-      // Check if we find any shift
+      // Check if we find any shift. min_shift suppresses moves too small to
+      // count as progress, but a move that lands the variable on an integer is
+      // always worth taking, however small it is.
       const SCIP_Real delta = new_val - x;
-      if (REALABS(delta) >= min_shift) {
+      const bool becomes_integral = SCIPisFeasIntegral(scip, new_val);
+      if (!SCIPisZero(scip, delta) &&
+          (REALABS(delta) >= min_shift || becomes_integral)) {
         incumbent[var_idx.index] = new_val;
         shift_found = true;
 
@@ -272,7 +281,7 @@ SCIP_DECL_HEUREXEC(ZIRoundHeur::scip_exec) {
         }
 
         // drop the variable from the candidate list once it became integral
-        if (SCIPisFeasIntegral(scip, new_val)) {
+        if (becomes_integral) {
           to_remove_frac_indices.push_back(_i);
         }
       }

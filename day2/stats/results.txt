@@ -1,52 +1,34 @@
 
-== [2] mknap2 ==
-instance         status          time(s)        nodes
-mknap2_0         solved            0.051          524
-mknap2_1         solved            0.127         2181
-mknap2_2         solved            0.002           77
-mknap2_3         solved            0.001           51
-mknap2_4         solved            0.001           75
-mknap2_5         solved            0.002           25
-mknap2_6         solved            0.001           31
-mknap2_7         solved            0.001           21
-mknap2_8         solved            0.005           60
-mknap2_9         solved            0.039         1694
-mknap2_10        solved            0.002           45
-mknap2_11        solved            0.001           21
-mknap2_12        solved            0.001           35
-mknap2_13        solved            0.001            1
-mknap2_14        solved            0.001            1
-mknap2_15        solved            0.003           60
-mknap2_16        solved            0.002           72
-mknap2_17        solved            0.002           41
-mknap2_18        solved            0.002            1
-mknap2_19        solved            0.007          193
-mknap2_20        solved            0.002           31
-mknap2_21        solved            0.005           61
-mknap2_22        solved            0.003           57
-mknap2_23        solved            0.003           69
-mknap2_24        solved            0.003           37
-mknap2_25        solved            0.002           67
-mknap2_26        solved            0.003           17
-mknap2_27        solved            0.006          145
-mknap2_28        solved            0.003          127
-mknap2_29        solved            0.004           67
-mknap2_30        solved            0.003          127
-mknap2_31        solved            0.004           53
-mknap2_32        solved            0.004          137
-mknap2_33        solved            0.004          103
-mknap2_34        solved            0.005          109
-mknap2_35        solved            0.009          369
-mknap2_36        solved            0.005           79
-mknap2_37        solved            0.006           71
-mknap2_38        solved            0.002           65
-mknap2_39        solved            0.001            1
-mknap2_40        solved            0.006          170
-mknap2_41        solved            0.029         1260
-mknap2_42        solved            0.008          388
-mknap2_43        solved            0.025         1371
-mknap2_44        solved            0.014          195
-mknap2_45        solved            0.105         2485
-mknap2_46        solved            0.013          372
-mknap2_47        solved            0.035          963
---               geomean           0.010       78.022
+== [3] mknapcb1 ==
+instance         status          time(s)        nodes primal-dual-integral
+mknapcb1_0       solved            5.057       279867                1.042
+mknapcb1_1       solved            2.101       107432                0.657
+mknapcb1_2       solved            4.745       251452                1.632
+mknapcb1_3       solved           10.150       606530                2.033
+mknapcb1_4       solved            4.610       254471                1.348
+mknapcb1_5       solved            2.199       119466                0.667
+mknapcb1_6       solved            0.688        33292                0.244
+mknapcb1_7       solved            2.597       155107                0.887
+mknapcb1_8       solved            3.206       162273                0.816
+mknapcb1_9       solved            3.436       186602                0.826
+mknapcb1_10      solved            0.769        39225                0.149
+mknapcb1_11      solved            1.798        87738                0.278
+mknapcb1_12      not solved       60.000       100000                2.693
+mknapcb1_13      solved            4.727       236001                0.708
+mknapcb1_14      solved            2.094       104436                0.307
+mknapcb1_15      solved            0.918        43795                0.155
+mknapcb1_16      solved            0.342        15143                0.116
+mknapcb1_17      solved            8.278       398352                1.142
+mknapcb1_18      solved            1.205        57411                0.169
+mknapcb1_19      solved            2.089        98432                0.362
+mknapcb1_20      solved            0.489        25103                0.107
+mknapcb1_21      solved            0.345        13739                0.111
+mknapcb1_22      solved            1.593        82738                0.178
+mknapcb1_23      solved            2.659       155256                0.258
+mknapcb1_24      solved            1.040        47258                0.199
+mknapcb1_25      solved            3.349       155232                0.412
+mknapcb1_26      solved            1.059        44103                0.143
+mknapcb1_27      solved            0.992        42034                0.134
+mknapcb1_28      solved            0.565        23063                0.157
+mknapcb1_29      solved            3.936       163412                0.442
+--               geomean           2.130    91180.914                0.425
