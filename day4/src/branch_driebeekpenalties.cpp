@@ -270,6 +270,8 @@ SCIP_DECL_BRANCHEXECLP(DriebeekPenalties::scip_execlp) {
       // free/superbasic nonbasic: moves either way at zero reduced cost
       if (base_stats[j] == AtZero) return 0.0;
 
+      if (var_source[j] == Col && is_integer_constrained[j])
+        delta = (delta > 0) ? MAX(delta, 1.0) : MIN(delta, -1.0);
       return reduced_costs[j] * delta;
     };
 

@@ -1,3 +1,7 @@
 .claude
 **/build/
 **/.DS_Store
+
+
+**/stats
+day4/stats/results.txt
