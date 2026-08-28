@@ -172,6 +172,11 @@ SCIP_DECL_BRANCHEXECLP(DriebeekPenalties::scip_execlp) {
   auto best_least_up = SCIPinfinity(scip);
   /* End of do not edit, SETUP*/
 
+  // min(P_down, P_up) is a valid lower bound for this node itself: any integer
+  // point in the subtree lies on one of the two branches. Each candidate yields
+  // an independently valid bound, so keep the strongest.
+  auto best_node_bound = 0.0;
+
   /*
    *
    * Lets recap what have been provided
@@ -220,6 +225,7 @@ SCIP_DECL_BRANCHEXECLP(DriebeekPenalties::scip_execlp) {
 
     /*
      * General bound-aware Driebeek penalty:
+     * alt. Driebeek comeback
      *
      *   down_gap = x_i* - floor(x_i*)
      *   up_gap   = ceil(x_i*) - x_i*
@@ -253,16 +259,54 @@ SCIP_DECL_BRANCHEXECLP(DriebeekPenalties::scip_execlp) {
      * and least_down_penalty
      *
      */
+    auto movement_penalty = [&](int j, SCIP_Real delta) -> SCIP_Real {
+      // 1. fixed variable: cannot move at all, in either direction
+      if (SCIPisEQ(scip, lower_bounds[j], upper_bounds[j]))
+        return SCIPinfinity(scip);
+
+      // 2. at upper bound: can only decrease
+      if (base_stats[j] == AtUpBound && SCIPisPositive(scip, delta))
+        return SCIPinfinity(scip);
+
+      // 3. at lower bound: can only increase
+      if (base_stats[j] == AtLowBound && SCIPisNegative(scip, delta))
+        return SCIPinfinity(scip);
+
+      // free/superbasic nonbasic: moves either way at zero reduced cost
+      if (base_stats[j] == AtZero) return 0.0;
+
+      if (var_source[j] == Col && is_integer_constrained[j])
+        delta = (delta > 0) ? MAX(delta, 1.0) : MIN(delta, -1.0);
+      return reduced_costs[j] * delta;
+    };
+
     auto least_up_penalty = SCIPinfinity(scip);
     auto least_down_penalty = SCIPinfinity(scip);
 
     // TODO: Compute least_up_penalty and least_down_penalty.
+    auto down_gap = sol - SCIPfloor(scip, sol);
+    auto up_gap = SCIPceil(scip, sol) - sol;
+    for (auto j : std::views::iota(0, static_cast<int>(num_cols + num_rows))) {
+      if (base_stats[j] == Basic) continue;
+      if (SCIPisZero(scip, tableau_coeff[j])) continue;
+      const auto down_delta = (down_gap / tableau_coeff[j]);
+      const auto up_delta = (-up_gap / tableau_coeff[j]);
 
+      least_up_penalty =
+          std::min(movement_penalty(j, up_delta), least_up_penalty);
+      least_down_penalty =
+          std::min(movement_penalty(j, down_delta), least_down_penalty);
+    }
+    if (!SCIPisInfinity(scip, least_up_penalty))
+      least_up_penalty = MAX(least_up_penalty, 0.0);
+    if (!SCIPisInfinity(scip, least_down_penalty))
+      least_down_penalty = MAX(least_down_penalty, 0.0);
     /*
-    * Our driebeek penalty give lowerbounds on the LP objective if we branch up
-    * and down. SCIP also give cutoff value. If the LP relaxation of the node
-    * have a value higher than the cutoff value we can prune the node
-    */
+     * Our driebeek penalty give lowerbounds on the LP objective if we
+     * branch up and down. SCIP also give cutoff value. If the LP
+     * relaxation of the node have a value higher than the cutoff
+     * value we can prune the node
+     */
     auto up_pruneable =
         SCIPisInfinity(scip, least_up_penalty) ||
         (have_cutoff &&
@@ -275,16 +319,21 @@ SCIP_DECL_BRANCHEXECLP(DriebeekPenalties::scip_execlp) {
     if (up_pruneable && down_pruneable) {
       *result = SCIP_CUTOFF;
       return SCIP_OKAY;
-    } else if (up_pruneable) {
+    }
+
+    // Valid even when one side is pruneable: the infinite penalty drops out of
+    // the min and the surviving branch supplies the bound.
+    auto node_bound = MIN(least_down_penalty, least_up_penalty);
+    if (node_bound > best_node_bound) best_node_bound = node_bound;
+
+    if (up_pruneable) {
       CALL_CHECK(SCIPchgVarUb(scip, var, SCIPfeasFloor(scip, sol)));
-      *result = SCIP_REDUCEDDOM;
-      return SCIP_OKAY;
     } else if (down_pruneable) {
       CALL_CHECK(SCIPchgVarLb(scip, var, SCIPfeasCeil(scip, sol)));
-      *result = SCIP_REDUCEDDOM;
-      return SCIP_OKAY;
     } else {
       auto penalty = MAX(least_up_penalty, least_down_penalty);
+      // auto penalty =
+      //    SCIPgetBranchScore(scip, var, least_down_penalty, least_up_penalty);
       if (penalty > best_penalty) {
         best_penalty = penalty;
         best_col = idx;
@@ -293,6 +342,11 @@ SCIP_DECL_BRANCHEXECLP(DriebeekPenalties::scip_execlp) {
       }
     }
   }
+
+  // Apply the strengthened node bound before returning through any path below.
+  if (best_node_bound > 0.0)
+    CALL_CHECK(
+        SCIPupdateLocalLowerbound(scip, lp_optimal_value + best_node_bound));
 
   // Call branch on column function
   // branch_on_column(
@@ -307,7 +361,7 @@ SCIP_DECL_BRANCHEXECLP(DriebeekPenalties::scip_execlp) {
   //     determine if down child or up child will be visited first
   //     SCIP_Real up_child_priority // same here
   //     );
-  if (best_col >= 0) {
+  if (best_col >= 0 && !SCIPisZero(scip, best_penalty)) {
     branch_on_column(scip, result, lp_variables, best_col,
                      lp_optimal_value + best_least_down,
                      lp_optimal_value + best_least_up, -best_least_down,
