@@ -176,6 +176,11 @@ SCIP_DECL_BRANCHEXECLP(DriebeekPenalties::scip_execlp) {
   // point in the subtree lies on one of the two branches. Each candidate yields
   // an independently valid bound, so keep the strongest.
   auto best_node_bound = 0.0;
+  auto apply_node_bound = [&] {
+    if (best_node_bound > 0.0)
+      CALL_CHECK(
+          SCIPupdateLocalLowerbound(scip, lp_optimal_value + best_node_bound));
+  };
 
   /*
    *
@@ -275,8 +280,9 @@ SCIP_DECL_BRANCHEXECLP(DriebeekPenalties::scip_execlp) {
       // free/superbasic nonbasic: moves either way at zero reduced cost
       if (base_stats[j] == AtZero) return 0.0;
 
-      if (var_source[j] == Col && is_integer_constrained[j])
+      if (var_source[j] == Col && is_integer_constrained[j]) {
         delta = (delta > 0) ? MAX(delta, 1.0) : MIN(delta, -1.0);
+      }
       return reduced_costs[j] * delta;
     };
 
@@ -326,10 +332,20 @@ SCIP_DECL_BRANCHEXECLP(DriebeekPenalties::scip_execlp) {
     auto node_bound = MIN(least_down_penalty, least_up_penalty);
     if (node_bound > best_node_bound) best_node_bound = node_bound;
 
+    // A bound change invalidates the current LP, so the tableau rows of the
+    // remaining candidates are no longer usable: report the reduction and let
+    // SCIP re-solve. Returning without SCIP_REDUCEDDOM would hand the
+    // now-unsolved LP to the next branching rule.
     if (up_pruneable) {
       CALL_CHECK(SCIPchgVarUb(scip, var, SCIPfeasFloor(scip, sol)));
+      apply_node_bound();
+      *result = SCIP_REDUCEDDOM;
+      return SCIP_OKAY;
     } else if (down_pruneable) {
       CALL_CHECK(SCIPchgVarLb(scip, var, SCIPfeasCeil(scip, sol)));
+      apply_node_bound();
+      *result = SCIP_REDUCEDDOM;
+      return SCIP_OKAY;
     } else {
       auto penalty = MAX(least_up_penalty, least_down_penalty);
       // auto penalty =
@@ -344,9 +360,7 @@ SCIP_DECL_BRANCHEXECLP(DriebeekPenalties::scip_execlp) {
   }
 
   // Apply the strengthened node bound before returning through any path below.
-  if (best_node_bound > 0.0)
-    CALL_CHECK(
-        SCIPupdateLocalLowerbound(scip, lp_optimal_value + best_node_bound));
+  apply_node_bound();
 
   // Call branch on column function
   // branch_on_column(
