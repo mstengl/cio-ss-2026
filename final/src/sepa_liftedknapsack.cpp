@@ -57,6 +57,22 @@ void LiftedKnapsackSepa::add_cut(SCIP* scip, SCIP_SEPA* sepa,
 }
 /*Do not change end*/
 
+/* The knapsack rows are cached across nodes, so we have to own a reference to
+ * them: without capturing, SCIP frees the rows as soon as the LP drops them and
+ * the cached pointers dangle at the next node. */
+SCIP_DECL_SEPAINITSOL(LiftedKnapsackSepa::scip_initsol) {
+  knapsack_constraints.reset();
+  return SCIP_OKAY;
+}
+
+SCIP_DECL_SEPAEXITSOL(LiftedKnapsackSepa::scip_exitsol) {
+  if (knapsack_constraints) {
+    for (auto row : *knapsack_constraints) CALL_CHECK(SCIPreleaseRow(scip, &row));
+    knapsack_constraints.reset();
+  }
+  return SCIP_OKAY;
+}
+
 SCIP_DECL_SEPAEXECLP(LiftedKnapsackSepa::scip_execlp) {
   /* Do not touch start*/
   *result = SCIP_DIDNOTRUN;
@@ -122,6 +138,7 @@ SCIP_DECL_SEPAEXECLP(LiftedKnapsackSepa::scip_execlp) {
           }))
         continue;
       // Row is knapsack!!!
+      CALL_CHECK(SCIPcaptureRow(scip, row));
       temp_knapsack_rows.push_back(row);
     }
     // Store knapsack constraints

@@ -13,6 +13,8 @@ class LiftedKnapsackSepa : public scip::ObjSepa {
       : scip::ObjSepa(scip, "liftedknapsack", "Lifted Knapsack Separator",
                       99999, 1, 1.0, 0, false) {};
   SCIP_DECL_SEPAEXECLP(scip_execlp) override;
+  SCIP_DECL_SEPAINITSOL(scip_initsol) override;
+  SCIP_DECL_SEPAEXITSOL(scip_exitsol) override;
 
  private:
   void add_cut(SCIP* scip, SCIP_SEPA* sepa, std::span<int> indices,
