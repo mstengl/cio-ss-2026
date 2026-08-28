@@ -7,6 +7,7 @@
 #include <scip/type_var.h>
 
 #include <algorithm>
+#include <cassert>
 #include <cstddef>
 #include <functional>
 #include <iostream>
@@ -146,102 +147,110 @@ SCIP_DECL_SEPAEXECLP(LiftedKnapsackSepa::scip_execlp) {
      * a[0]*x[i_1] + a[1]*x[i_2] + ... + a[k]*x[i_k] <= b
      * where a >= 0, {i_1, ..., i_k} c {1,..., n}
      * to simplify, we can pretend the row is of the form
-     * a[0]*x[0] + ... + a[k]*x[k] <= b
+     * a[0]*x[1] + ... + a[k]*x[k] <= b
      * and only do the mapping back at the end
      * the vector a is already available as row_coefs
      */
     // Get the vector x
-    std::vector<SCIP_Real> lp_solution;
-    lp_solution.reserve(n_k);
-    for (auto col : row_cols) lp_solution.push_back(SCIPcolGetPrimsol(col));
+    incumbent_solution.clear();
+    incumbent_solution.reserve(n_k);
+    for (auto col : row_cols)
+      incumbent_solution.push_back(SCIPcolGetPrimsol(col));
     // Get the mapping m -> i_m
-    std::vector<int> indices;
+    indices.clear();
     indices.reserve(n_k);
     for (auto col : row_cols) indices.push_back(SCIPcolGetLPPos(col));
     auto rhs = SCIProwGetRhs(row) - SCIProwGetConstant(row);
     // Items taken should contain your cover
-    std::vector<int> items_taken;
+    items_taken.clear();
+    items_not_taken.clear();
 
+    // min sum (1-x_i) y_i
+    // sum a_i y_i >= b+1
+    //
     // Start here :)
     // Check that the row is not trivially satisfiable(by setting all xs 0 to 1
     // otherwise continue)
-    auto total_weight = 0.0;
-    for (auto coef : row_coeffs) total_weight += coef;
-    if (SCIPisFeasLE(scip, total_weight, rhs)) continue;
-
+    auto sum = 0.0;
+    auto taken_capacity = 0.0;
+    for (const auto i : std::ranges::views::iota(0, n_k)) {
+      sum += row_coeffs[i];
+      if (SCIPisZero(scip, 1.0 - incumbent_solution[i])) {
+        items_taken.push_back(i);
+        taken_capacity += row_coeffs[i];
+      } else {
+        items_not_taken.push_back(i);
+      }
+    }
+    if (SCIPisGE(scip, rhs, sum)) {
+      continue;
+    }
     // for our purposes now the row is ax_0 + ax_1 + ... + ax_n <= b, where
     // b= rhs and all x_i are binary
-
-    auto accumulated_weight = 0.0;
-    auto accumulated_cost = 0.0;
-
+    // ...
+    assert(SCIPisFeasLE(scip, taken_capacity, rhs));
     // We do multiple past for clarity
     // First past get all LP solutions where x_j = 1
+    // ...
 
     // For each of the remaining vars
     // We construct a vector of pairs (cost per unit of weight, indices)
     // Hint: std::vector<std::pair<SCIP_Real,int>> list;
     // list.push_back(std::make_pair(quantity, index));
-    std::vector<std::pair<SCIP_Real, int>> cost_per_unit_of_weight_indices;
-    for (int i = 0; i < n_k; ++i) {
-      if (SCIPisFeasEQ(scip, lp_solution[i], 1)) continue;
-      auto cost = 1 - lp_solution[i];
-      auto weight = row_coeffs[i];
-      cost_per_unit_of_weight_indices.push_back(
-          std::make_pair(cost / weight, i));
+    cpuw_list.clear();
+    cpuw_list.reserve(std::size(items_not_taken));
+    for (const auto i : items_not_taken) {
+      auto quantity = (1.0 - incumbent_solution[i]) / row_coeffs[i];
+      cpuw_list.push_back(std::make_pair(quantity, i));
     }
-
-    // Sort using std::ranges::sort by default ranges is sorted in ascending
-    // order it is sorted by first checking the first argument
-
-    std::ranges::sort(cost_per_unit_of_weight_indices);
-
+    std::ranges::sort(cpuw_list, std::ranges::greater{});
     // start grabbing while accumulated_weight is not greater than b+1
     // Use auto [ratio, index] = vars[i]; to extract data from pair
-
-    // ...
-    for (auto [ratio, index] : cost_per_unit_of_weight_indices) {
-      if (SCIPisFeasGT(scip, accumulated_weight, rhs + 1)) break;
-      accumulated_weight += row_coeffs[index];
-      accumulated_cost += 1 - lp_solution[index];
-      items_taken.push_back(index);
+    while (SCIPisLT(scip, taken_capacity, rhs + 1) && !cpuw_list.empty()) {
+      const auto [w, i] = cpuw_list.back();
+      cpuw_list.pop_back();
+      taken_capacity += row_coeffs[i];
+      items_taken.push_back(i);
     }
+    // We ran out of items before reaching b+1, so this is not a cover
+    if (SCIPisLT(scip, taken_capacity, rhs + 1)) {
+      continue;
+    }
+    // ...
 
     // We might overshoot so see if item could have been removed
-    /* less efficient
-    std::vector<int> items_taken_copy;
-    for (int i = std::ssize(items_taken) - 1; i >= 0; --i) {
-      auto index = items_taken[i];
-      if (SCIPisFeasGT(scip, accumulated_weight - row_coeffs[index], rhs + 1)) {
-        accumulated_weight -= row_coeffs[index];
-        accumulated_cost -= 1 - incumbent_solution[index];
-      } else {
-        items_taken_copy.push_back(index);
+    auto j = static_cast<int>(items_taken.size()) - 1;
+    while (j >= 0) {
+      const auto index = items_taken.at(j);
+      if (SCIPisGE(scip, taken_capacity - row_coeffs[index], rhs + 1)) {
+        taken_capacity -= row_coeffs[index];
+        std::swap(items_taken[j], items_taken.back());
+        items_taken.pop_back();
       }
+      j--;
     }
-    items_taken = std::move(items_taken_copy);
-    */
+    // ...
 
-    std::erase_if(items_taken, [&](int i) {
-      if (SCIPisGE(scip, accumulated_weight - row_coeffs[i], rhs + 1)) {
-        accumulated_weight -= row_coeffs[i];
-        accumulated_cost -= 1 - lp_solution[i];
-        return true;
-      }
-      return false;
-    });
+    // The cover cut sum_{i in C} x_i <= |C| - 1 is violated exactly when
+    // sum_{i in C} (1 - x_i) < 1. Minimizing the cover above only removed
+    // items, so we evaluate the cost on the final cover.
+    auto costs = 0.0;
+    for (const auto i : items_taken) costs += 1.0 - incumbent_solution[i];
+    if (SCIPisGE(scip, costs, 1.0)) {
+      continue;  // no cut
+    }
 
     // No cut can be separated (at least as we heuristically can see it from
     // this constraint)
 
-    if (SCIPisFeasGE(scip, accumulated_cost, 1)) continue;
+    // ...
 
     // End of code you need to fill
 
     // The following code push the knapsack cover cut to SCIP
-    std::vector<SCIP_Real> coeffs(std::ssize(items_taken), 1);
-    std::vector<int> original_indices;
-    original_indices.reserve(std::ssize(items_taken));
+    coeffs.assign(std::size(items_taken), 1.0);
+    original_indices.clear();
+    original_indices.reserve(std::size(items_taken));
     for (auto item : items_taken) original_indices.push_back(indices[item]);
 
     add_cut(scip, sepa, original_indices, coeffs, -SCIPinfinity(scip),
