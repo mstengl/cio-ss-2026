@@ -2,7 +2,10 @@
 #
 # Benchmark mknap instance classes with read_mps.
 #
-# Usage:  ./benchmark N [N ...]    1=mknap1  2=mknap2  3=mknapcb1  4=mknapcb4
+# Usage:  ./benchmark [--scip] N [N ...]    1=mknap1  2=mknap2  3=mknapcb1  4=mknapcb4
+#
+# With --scip, plain SCIP (/opt/homebrew/bin/scip) is benchmarked instead of our
+# read_mps binary, using default.set with our plugin-specific parameters removed.
 #
 # Full SCIP statistics per instance land in stats/.
 
@@ -11,6 +14,17 @@ BUILD="$DIR/build"
 MPS="$DIR/mps_files"
 STATS_DIR="$DIR/stats"
 SHIFT=0.1
+SCIP_BIN=/opt/homebrew/bin/scip
+
+USE_SCIP=0
+args=()
+for a in "$@"; do
+  case "$a" in
+  --scip) USE_SCIP=1 ;;
+  *) args+=("$a") ;;
+  esac
+done
+set -- "${args[@]}"
 
 # Shifted geometric mean: exp(mean(log(x+s))) - s.
 geomean() { # $1 = shift, rest = values
@@ -22,12 +36,43 @@ geomean() { # $1 = shift, rest = values
 
 row() { printf '%-16s %-12s %10s %12s %20s\n' "$1" "$2" "$3" "$4" "$5" | tee -a "$RESULTS"; }
 
-make -C "$BUILD" read_mps >/dev/null
-
 mkdir -p "$STATS_DIR"
 rm -f "$STATS_DIR"/*.stats
 RESULTS="$STATS_DIR/results.txt"
 : >"$RESULTS"
+
+if [ "$USE_SCIP" -eq 1 ]; then
+  # Plain SCIP does not know our plugins, so drop their parameters.
+  SETTINGS="$STATS_DIR/scip.set"
+  grep -vE 'ziround|driebeekpenalties|liftedknapsack' "$DIR/default.set" >"$SETTINGS"
+else
+  make -C "$BUILD" read_mps >/dev/null
+fi
+
+# Runs the solver on $1 (mps file) writing the log to $2, then sets
+# status/time/nodes/pdi from that log.
+run_instance() {
+  if [ "$USE_SCIP" -eq 1 ]; then
+    "$SCIP_BIN" -s "$SETTINGS" -c "read $1" -c optimize -c "display statistics" \
+      -c quit >"$2" 2>&1
+
+    if grep -q '^SCIP Status *: problem is solved \[optimal solution found\]' "$2"; then
+      status=solved
+    else
+      status="not solved"
+    fi
+    time="$(sed -n 's/^  solving *: *//p' "$2" | tail -1 | awk '{print $1}')"
+    nodes="$(sed -n 's/^  nodes (total) *: *//p' "$2" | tail -1 | awk '{print $1}')"
+    pdi="$(sed -n 's/^  primal-dual *: *//p' "$2" | tail -1 | awk '{print $1}')"
+  else
+    "$BUILD/read_mps" "$1" >"$2" 2>&1
+
+    status="$(sed -n 's/^Solution Status: *//p' "$2" | tail -1)"
+    time="$(sed -n 's/^Time: *//p' "$2" | tail -1)"
+    nodes="$(sed -n 's/^Nodes: *//p' "$2" | tail -1)"
+    pdi="$(sed -n 's/^PrimalDualIntegral: *//p' "$2" | tail -1)"
+  fi
+}
 
 for sel in "$@"; do
   case "$sel" in
@@ -47,12 +92,7 @@ for sel in "$@"; do
   for f in $(cd "$MPS" && ls "${cls}_"*.mps | sort -V); do
     name="${f%.mps}"
     statfile="$STATS_DIR/$name.stats"
-    "$BUILD/read_mps" "$MPS/$f" >"$statfile" 2>&1
-
-    status="$(sed -n 's/^Solution Status: *//p' "$statfile" | tail -1)"
-    time="$(sed -n 's/^Time: *//p' "$statfile" | tail -1)"
-    nodes="$(sed -n 's/^Nodes: *//p' "$statfile" | tail -1)"
-    pdi="$(sed -n 's/^PrimalDualIntegral: *//p' "$statfile" | tail -1)"
+    run_instance "$MPS/$f" "$statfile"
 
     row "$name" "$status" "$(printf '%.3f' "$time")" "$nodes" "$(printf '%.3f' "$pdi")"
     times+=("$time")
