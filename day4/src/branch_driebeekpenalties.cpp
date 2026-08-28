@@ -172,6 +172,11 @@ SCIP_DECL_BRANCHEXECLP(DriebeekPenalties::scip_execlp) {
   auto best_least_up = SCIPinfinity(scip);
   /* End of do not edit, SETUP*/
 
+  // min(P_down, P_up) is a valid lower bound for this node itself: any integer
+  // point in the subtree lies on one of the two branches. Each candidate yields
+  // an independently valid bound, so keep the strongest.
+  auto best_node_bound = 0.0;
+
   /*
    *
    * Lets recap what have been provided
@@ -314,16 +319,21 @@ SCIP_DECL_BRANCHEXECLP(DriebeekPenalties::scip_execlp) {
     if (up_pruneable && down_pruneable) {
       *result = SCIP_CUTOFF;
       return SCIP_OKAY;
-    } else if (up_pruneable) {
+    }
+
+    // Valid even when one side is pruneable: the infinite penalty drops out of
+    // the min and the surviving branch supplies the bound.
+    auto node_bound = MIN(least_down_penalty, least_up_penalty);
+    if (node_bound > best_node_bound) best_node_bound = node_bound;
+
+    if (up_pruneable) {
       CALL_CHECK(SCIPchgVarUb(scip, var, SCIPfeasFloor(scip, sol)));
-      *result = SCIP_REDUCEDDOM;
-      return SCIP_OKAY;
     } else if (down_pruneable) {
       CALL_CHECK(SCIPchgVarLb(scip, var, SCIPfeasCeil(scip, sol)));
-      *result = SCIP_REDUCEDDOM;
-      return SCIP_OKAY;
     } else {
       auto penalty = MAX(least_up_penalty, least_down_penalty);
+      // auto penalty =
+      //    SCIPgetBranchScore(scip, var, least_down_penalty, least_up_penalty);
       if (penalty > best_penalty) {
         best_penalty = penalty;
         best_col = idx;
@@ -332,6 +342,11 @@ SCIP_DECL_BRANCHEXECLP(DriebeekPenalties::scip_execlp) {
       }
     }
   }
+
+  // Apply the strengthened node bound before returning through any path below.
+  if (best_node_bound > 0.0)
+    CALL_CHECK(
+        SCIPupdateLocalLowerbound(scip, lp_optimal_value + best_node_bound));
 
   // Call branch on column function
   // branch_on_column(
@@ -346,7 +361,7 @@ SCIP_DECL_BRANCHEXECLP(DriebeekPenalties::scip_execlp) {
   //     determine if down child or up child will be visited first
   //     SCIP_Real up_child_priority // same here
   //     );
-  if (best_col >= 0) {
+  if (best_col >= 0 && !SCIPisZero(scip, best_penalty)) {
     branch_on_column(scip, result, lp_variables, best_col,
                      lp_optimal_value + best_least_down,
                      lp_optimal_value + best_least_up, -best_least_down,
