@@ -142,8 +142,9 @@ SCIP_DECL_HEUREXEC(ZIRoundHeur::scip_exec) {
   // Read the incumbent LP solution from SCIP see SCIPcolGetPrimsol
   _incumbent.resize(lp_cols.size());
   std::vector<SCIP_Real>& incumbent = _incumbent;
-  std::ranges::transform(lp_cols, incumbent.begin(),
-                         [](SCIP_COL* c) { return SCIPcolGetPrimsol(c); });
+  for (auto i : std::views::iota(0U, lp_cols.size())) {
+    incumbent[i] = SCIPcolGetPrimsol(lp_cols[i]);
+  }
   // Loop while there is any fractional variable remaining in the incumbent
   // solution and iter have not reached max iter
   int iter = 0;
@@ -154,9 +155,9 @@ SCIP_DECL_HEUREXEC(ZIRoundHeur::scip_exec) {
   // shift is committed to the incumbent.
   _activities.resize(lp_rows.size());
   std::vector<SCIP_Real>& activities = _activities;
-  std::ranges::transform(lp_rows, activities.begin(), [&](SCIP_ROW* r) {
-    return compute_incumbent_activity(r, incumbent);
-  });
+  for (auto i : std::views::iota(0U, lp_rows.size())) {
+    activities[i] = compute_incumbent_activity(lp_rows[i], incumbent);
+  }
   std::vector<size_t> to_remove_frac_indices;
   while (iter < max_iter && !fractional_vals.empty() && shift_found) {
     shift_found = false;
